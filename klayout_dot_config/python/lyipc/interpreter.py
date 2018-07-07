@@ -40,5 +40,15 @@ def parse_command(cmdStr):
         filename = os.path.realpath(filename)
         quickmsg(filename)
         hard_load_layout(filename)
+
+    elif cmdStr.startswith('cellview '):
+        cellname = cmdStr.split(' ')[1]
+        main = pya.Application.instance().main_window()
+        view = main.current_view()
+        cv = view.active_cellview()
+        cv.set_cell_name(cellname)
+        # show all layers of hierarchy
+        # fit to screen
+
     else:
         quickmsg(f'Received {cmdStr}')

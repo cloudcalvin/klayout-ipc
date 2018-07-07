@@ -32,6 +32,10 @@ def kill():
     send('kill')
 
 
+def view(cellname):
+    send(f'cellview {cellname}')
+
+
 def send(message='ping 1234', port=PORT):
     ''' Sends a raw message
 
@@ -67,29 +71,41 @@ def handle_query(retString):
         raise Exception('Not acknowledged, instead: ' + retString)
 
 
-def trace_pyainsert(layout, file, write_load_delay=0.01):
+def trace_pyainsert(layout, file, write_load_delay=0.01, ignore_layers=[]):
     ''' Writes to file and loads in the remote instance whenever pya.Shapes.insert is called
         "layout" is what will be written to file and loaded there.
 
         Intercepts pya.Shapes.insert globally, not just for the argument "layout".
         This is because usually cells are generated before they are inserted into the layout,
         yet we would still like to be able to visualize their creation.
+
+        Update: the cellview is switched to the one in which the shape is being drawn.
     '''
     import pya
     pya.Shapes.old_insert = pya.Shapes.insert
     def new_insert(self, *args, **kwargs):
         retval = pya.Shapes.old_insert(self, *args, **kwargs)
-        layout.write(file)
-        time.sleep(write_load_delay)
-        load(file)
+        if hasattr(self, 'traced_cell'):
+            layout.write(file)
+            time.sleep(write_load_delay)
+            # reload()
+            load(file)
+            view(self.traced_cell)
         return retval
     pya.Shapes.insert = new_insert
 
+    pya.Cell.old_shapes = pya.Cell.shapes
+    def new_shapes(self, *args, **kwargs):
+        theshape = pya.Cell.old_shapes(self, *args, **kwargs)
+        if args[0] not in ignore_layers:
+            theshape.traced_cell = self.name
+        return theshape
+    pya.Cell.shapes = new_shapes
 
 
 def trace_SiEPICplacecell(layout, file, write_load_delay=0.01):
     ''' Uses trace_pyainsert to intercept geometry creation, and also makes Pcells
-        place within the parent cell before being created. 
+        place within the parent cell before being created.
         Normally, pcells are created before they are placed.
     '''
     trace_pyainsert(layout, file, write_load_delay)
@@ -98,12 +114,14 @@ def trace_SiEPICplacecell(layout, file, write_load_delay=0.01):
     def new_place_cell(self, parent_cell, origin, params=None, relative_to=None, transform_into=False):
         layout = parent_cell.layout()
         # Build it to figure out the ports. Don't trace that
+        # untrace_pyainsert()
         pcell, ports = self.pcell(layout, params=params)
         # layout.delete_cell(pcell.cell_index())
         # Place an empty cell
         new_cell = layout.create_cell(self.name)
         retval = kpc.place_cell(parent_cell, new_cell, ports, origin, relative_to=relative_to, transform_into=transform_into)
         # Build it again, this time in place. Trace it as it builds
+        # trace_pyainsert(layout, file, write_load_delay)
         self.pcell(layout, cell=new_cell, params=params)
         return retval
     kpc.KLayoutPCell.place_cell = new_place_cell
