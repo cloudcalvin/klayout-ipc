@@ -1,0 +1,23 @@
+''' These are functions specific to phidl.
+    There is not necessarily any similarity with implementation in other languages
+'''
+from __future__ import print_function
+import phidl
+
+import time
+import os
+
+# Makes it so that only one import is needed: lyipc.client.phidl will drop in for lyipc.client
+from .general import *
+from .dependent import *
+
+
+def trace_phidladd(device, file, write_load_delay=0.01):
+    ''' Writes to file and loads in the remote instance whenever phidl.Device.add is called
+    '''
+    phidl.device_layout.Device.old_add = phidl.device_layout.Device.add
+    def new_add(self, *args, **kwargs):
+        retval = phidl.device_layout.Device.old_add(self, *args, **kwargs)
+        klayout_quickplot(device, file, fresh=False)
+        return retval
+    phidl.device_layout.Device.add = new_add
